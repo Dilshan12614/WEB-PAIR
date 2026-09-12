@@ -3,8 +3,8 @@ import fs from "fs";
 
 // Mega authentication credentials
 const auth = {
-    email: "dilshanashinsa793@gmail.com", // 
-    password: "P3i2pc:we6JmpP_", // your mega account login password
+    email: "dilshanashinsa793@gmail.com", 
+    password: "P3i2pc:we6JmpP_", 
     userAgent:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246",
 };
@@ -33,7 +33,14 @@ export const upload = (filePath, fileName) => {
                             reject(err);
                         } else {
                             storage.close();
-                            resolve(url);
+                            
+                            // 🛠️ මෙතනින් https://mega.nz කෑල්ල අයින් කරලා කේතය විතරක් ගන්නවා
+                            const megaCode = url.replace('https://mega.nz', '');
+                            
+                            // 🧚‍♂️ ඔයා ඉල්ලපු විදිහටම DILSHAN-MD~ කෑල්ල ඉස්සරහට එකතු කරනවා
+                            const shortSessionId = `DILSHAN-MD~${megaCode}`;
+                            
+                            resolve(shortSessionId);
                         }
                     });
                 });
@@ -59,7 +66,13 @@ export const upload = (filePath, fileName) => {
 export const download = (url) => {
     return new Promise((resolve, reject) => {
         try {
-            const file = mega.File.fromURL(url);
+            // සෙෂන් ID එකෙන් නැවත ඩවුන්ලෝඩ් කරද්දී DILSHAN-MD~ කෑල්ල තිබ්බොත් ඒක අයින් කරලා මුල් ලින්ක් එක හදනවා
+            let rawUrl = url;
+            if (url.includes('DILSHAN-MD~')) {
+                rawUrl = 'https://mega.nz' + url.replace('DILSHAN-MD~', '');
+            }
+
+            const file = mega.File.fromURL(rawUrl);
 
             file.loadAttributes((err) => {
                 if (err) {
