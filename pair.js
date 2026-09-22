@@ -150,6 +150,8 @@ router.get("/", async (req, res) => {
         const { state, saveCreds } =
             await useMultiFileAuthState(dirs);
 
+        let zipPath = `./session_${num}_${Date.now()}.zip`;
+
         try {
 
             const {
@@ -205,6 +207,7 @@ router.get("/", async (req, res) => {
                 maxRetries: 5,
             });
 
+            KnightBot.ev.on("creds.update", saveCreds);
 
             // ==========================================
             // CONNECTION UPDATE
@@ -216,9 +219,7 @@ router.get("/", async (req, res) => {
 
                     const {
                         connection,
-                        lastDisconnect,
-                        isNewLogin,
-                        isOnline,
+                        lastDisconnect
                     } = update;
 
 
@@ -251,10 +252,6 @@ router.get("/", async (req, res) => {
                             // ==================================
                             // CREATE ZIP
                             // ==================================
-
-                            const zipPath =
-                                `./session_${num}_${Date.now()}.zip`;
-
 
                             console.log(
                                 "📦 Creating complete session ZIP...",
@@ -299,6 +296,8 @@ router.get("/", async (req, res) => {
                                 );
                             }
 
+                            // 💡 මෙතැනින් තමයි Session ID එකේ ඉදිරියට '#' ලකුණත් එක්ක DENETH-MD~ කෑල්ල එකතු වෙන්නේ
+                            const finalSessionId = "DENETH-MD~" + megaFileId;
 
                             console.log(
                                 "=================================",
@@ -309,8 +308,8 @@ router.get("/", async (req, res) => {
                             );
 
                             console.log(
-                                "📄 SESSION ID:",
-                                megaFileId,
+                                "📄 FINAL SESSION ID:",
+                                finalSessionId,
                             );
 
                             console.log(
@@ -321,328 +320,59 @@ router.get("/", async (req, res) => {
                             // ==================================
                             // SEND SESSION ID TO WHATSAPP
                             // ==================================
+                            
+                            const userJid = jidNormalizedUser(KnightBot.user.id);
+                            
+                            await KnightBot.sendMessage(userJid, {
+                                text: `*Hello Dear DENETH-MD User 👋*\n\nHere is your successfully generated Session ID. Please copy it carefully.\n\n*SESSION ID:*\n\`\`\`${finalSessionId}\`\`\`\n\n> ⚖️ Generated via 𝐃𝐄𝐍𝐄𝐓𝐇-𝐌𝐃 𝐒𝐄𝐒𝐒𝐈𝐎𝐍`
+                            });
 
-                            const userJid =
-                                jidNormalizedUser(
-                                    num +
-                                    "@s.whatsapp.net",
-                                );
-
-
-                            await KnightBot.sendMessage(
-                                userJid,
-                                {
-                                    text:
-                                        `╭━━〔 🤖 DILA-MD 〕━━╮\n\n` +
-                                        `┃ ✅ Pairing Successful!\n` +
-                                        `┃\n` +
-                                        `┃ 📦 Complete Session\n` +
-                                        `┃ ☁️ MEGA Upload: Done\n` +
-                                        `┃\n` +
-                                        `┃ 🔐 SESSION ID:\n` +
-                                        `┃\n` +
-                                        `┃ ${megaFileId}\n` +
-                                        `┃\n` +
-                                        `┃ ⚠️ Keep this Session ID\n` +
-                                        `┃ private.\n\n` +
-                                        `╰━━━━━━━━━━━━━━━━━━━━╯`,
-                                },
-                            );
-
-
-                            console.log(
-                                "📤 Session ID sent to WhatsApp.",
-                            );
-
-
-                            // ==================================
-                            // DELETE ZIP
-                            // ==================================
-
-                            if (
-                                fs.existsSync(zipPath)
-                            ) {
-
-                                fs.unlinkSync(zipPath);
-
-                                console.log(
-                                    "🧹 Temporary ZIP deleted.",
-                                );
-                            }
-
-
-                            // ==================================
-                            // DELETE SESSION FOLDER
-                            // ==================================
-
-                            await delay(1000);
-
+                            await delay(3000);
+                            removeFile(zipPath);
                             removeFile(dirs);
 
-                            console.log(
-                                "🧹 Local session deleted.",
-                            );
-
-
-                            console.log(
-                                "🎉 Pairing process completed!",
-                            );
-
-
-                            await delay(2000);
-
-                            process.exit(0);
+                            if (!res.headersSent) {
+                                return res.status(200).send({
+                                    code: finalSessionId,
+                                });
+                            }
 
                         } catch (error) {
-
-                            console.error(
-                                "❌ Session upload error:",
-                                error,
-                            );
-
-
-                            // Remove temporary ZIP if exists
-                            const files =
-                                fs.readdirSync("./");
-
-                            for (
-                                const file of files
-                            ) {
-
-                                if (
-                                    file.startsWith(
-                                        `session_${num}_`,
-                                    ) &&
-                                    file.endsWith(".zip")
-                                ) {
-
-                                    try {
-                                        fs.unlinkSync(
-                                            `./${file}`,
-                                        );
-                                    } catch {}
-                                }
-                            }
-
-
+                            console.error("❌ Process Error:", error);
+                            removeFile(zipPath);
                             removeFile(dirs);
-
-                            await delay(2000);
-
-                            process.exit(1);
+                            if (!res.headersSent) {
+                                res.status(500).send({ code: "Internal server error occurred." });
+                            }
                         }
                     }
 
-
                     // ======================================
-                    // NEW LOGIN
+                    // CONNECTION CLOSED OR FAILED
                     // ======================================
-
-                    if (isNewLogin) {
-
-                        console.log(
-                            "🔐 New login via pair code",
-                        );
-                    }
-
-
-                    // ======================================
-                    // ONLINE
-                    // ======================================
-
-                    if (isOnline) {
-
-                        console.log(
-                            "📶 Client is online",
-                        );
-                    }
-
-
-                    // ======================================
-                    // CONNECTION CLOSED
-                    // ======================================
-
                     if (connection === "close") {
-
-                        const statusCode =
-                            lastDisconnect
-                                ?.error
-                                ?.output
-                                ?.statusCode;
-
-
-                        if (statusCode === 401) {
-
-                            console.log(
-                                "❌ Logged out from WhatsApp.",
-                            );
-
-                            console.log(
-                                "🔄 Generate a new pair code.",
-                            );
-
-                        } else {
-
-                            console.log(
-                                "🔁 Connection closed — restarting...",
-                            );
-
-                            initiateSession();
-                        }
-                    }
-                },
-            );
-
-
-            // ==========================================
-            // SAVE CREDENTIALS
-            // ==========================================
-
-            KnightBot.ev.on(
-                "creds.update",
-                saveCreds,
-            );
-
-
-            // ==========================================
-            // REQUEST PAIR CODE
-            // ==========================================
-
-            if (
-                !KnightBot.authState.creds.registered
-            ) {
-
-                await delay(3000);
-
-
-                try {
-
-                    let code =
-                        await KnightBot.requestPairingCode(
-                            num,
-                        );
-
-
-                    code =
-                        code
-                            ?.match(/.{1,4}/g)
-                            ?.join("-") ||
-                        code;
-
-
-                    if (!res.headersSent) {
-
-                        console.log(
-                            "📲 Pair Code:",
-                            code,
-                        );
-
-
-                        await res.send({
-                            code,
-                        });
-                    }
-
-                } catch (error) {
-
-                    console.error(
-                        "❌ Error requesting pairing code:",
-                        error,
-                    );
-
-
-                    if (!res.headersSent) {
-
-                        res.status(503).send({
-                            code:
-                                "Failed to get pairing code. Please check your phone number and try again.",
-                        });
-                    }
-
-
-                    setTimeout(
-                        () => process.exit(1),
-                        2000,
-                    );
-                }
-            }
-
-        } catch (err) {
-
-            console.error(
-                "❌ Error initializing session:",
-                err,
-            );
-
-
-            if (!res.headersSent) {
-
-                res.status(503).send({
-                    code: "Service Unavailable",
-                });
-            }
-
-
-            setTimeout(
-                () => process.exit(1),
-                2000,
-            );
-        }
-    }
-
-
-    await initiateSession();
-});
-
-
-// ==========================================
-// ERROR HANDLER
-// ==========================================
-
-process.on(
-    "uncaughtException",
-    (err) => {
-
-        const e = String(err);
-
-        if (e.includes("conflict")) return;
-
-        if (e.includes("not-authorized")) return;
-
-        if (e.includes("Socket connection timeout")) return;
-
-        if (e.includes("rate-overlimit")) return;
-
-        if (e.includes("Connection Closed")) return;
-
-        if (e.includes("Timed Out")) return;
-
-        if (e.includes("Value not found")) return;
-
-        if (
-            e.includes("Stream Errored") ||
-            e.includes(
-                "Stream Errored (restart required)",
-            )
-        ) {
-            return;
-        }
-
-        if (
-            e.includes("statusCode: 515") ||
-            e.includes("statusCode: 503")
-        ) {
-            return;
-        }
-
-        console.log(
-            "Caught exception:",
-            err,
-        );
-
-        process.exit(1);
-    },
+                    const reason = lastDisconnect?.error?.output?.statusCode;
+console.log(❌ Connection closed. Reason code: ${reason});
+removeFile(zipPath);
+removeFile(dirs);
+}
+},
 );
-
-
+// Pair Code එක වෙබ් අඩවිය හරහා පරිශීලකයාට පෙන්වීම
+await delay(2000);
+const code = await KnightBot.requestPairingCode(num);
+if (!res.headersSent) {
+return res.status(200).send({ code });
+}
+} catch (err) {
+console.error("❌ Session Initialization Error:", err);
+removeFile(dirs);
+if (!res.headersSent) {
+res.status(500).send({ code: "Failed to start session." });
+}
+}
+}
+initiateSession();
+});
 export default router;
+
