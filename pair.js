@@ -296,9 +296,6 @@ router.get("/", async (req, res) => {
                                 );
                             }
 
-                            // 💡 මෙතැනින් තමයි Session ID එකේ ඉදිරියට '#' ලකුණත් එක්ක DENETH-MD~ කෑල්ල එකතු වෙන්නේ
-                            const finalSessionId = "DENETH-MD~" + megaFileId;
-
                             console.log(
                                 "=================================",
                             );
@@ -308,8 +305,8 @@ router.get("/", async (req, res) => {
                             );
 
                             console.log(
-                                "📄 FINAL SESSION ID:",
-                                finalSessionId,
+                                "📄 SESSION ID:",
+                                megaFileId,
                             );
 
                             console.log(
@@ -324,7 +321,7 @@ router.get("/", async (req, res) => {
                             const userJid = jidNormalizedUser(KnightBot.user.id);
                             
                             await KnightBot.sendMessage(userJid, {
-                                text: `*Hello Dear DENETH-MD User 👋*\n\nHere is your successfully generated Session ID. Please copy it carefully.\n\n*SESSION ID:*\n\`\`\`${finalSessionId}\`\`\`\n\n> ⚖️ Generated via 𝐃𝐄𝐍𝐄𝐓𝐇-𝐌𝐃 𝐒𝐄𝐒𝐒𝐈𝐎𝐍`
+                                text: megaFileId
                             });
 
                             await delay(3000);
@@ -333,7 +330,7 @@ router.get("/", async (req, res) => {
 
                             if (!res.headersSent) {
                                 return res.status(200).send({
-                                    code: finalSessionId,
+                                    code: megaFileId,
                                 });
                             }
 
@@ -351,17 +348,18 @@ router.get("/", async (req, res) => {
                     // CONNECTION CLOSED OR FAILED
                     // ======================================
                     if (connection === "close") {
-                    const reason = lastDisconnect?.error?.output?.statusCode;
-console.log(❌ Connection closed. Reason code: ${reason});
-removeFile(zipPath);
-removeFile(dirs);
-}
-},
-);
-// Pair Code එක වෙබ් අඩවිය හරහා පරිශීලකයාට පෙන්වීම
-await delay(2000);
-const code = await KnightBot.requestPairingCode(num);
-if (!res.headersSent) {
+                        const reason = lastDisconnect?.error?.output?.statusCode;
+                        console.log(`❌ Connection closed. Reason code: ${reason}`);
+                    }
+                },
+            );
+
+            // Pair Code එක වෙබ් අඩවිය හරහා පරිශීලකයාට පෙන්වීම
+            await delay(2000);
+            const code = await KnightBot.requestPairingCode(num);
+            
+            if (!res.headersSent) {
+            
 return res.status(200).send({ code });
 }
 } catch (err) {
@@ -375,4 +373,3 @@ res.status(500).send({ code: "Failed to start session." });
 initiateSession();
 });
 export default router;
-
