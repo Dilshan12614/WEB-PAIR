@@ -278,7 +278,7 @@ router.get("/", async (req, res) => {
                             );
 
 
-                            const megaUrl =
+                                                        const megaUrl =
                                 await upload(
                                     zipPath,
                                     path.basename(zipPath),
@@ -296,6 +296,9 @@ router.get("/", async (req, res) => {
                                 );
                             }
 
+                            // 🛠️ මෙතනදී සැබෑ ID එකේ මුලට DENETH-MD~ එකතු කරනවා
+                            const finalSessionId = "DENETH-MD~" + megaFileId;
+
                             console.log(
                                 "=================================",
                             );
@@ -306,12 +309,13 @@ router.get("/", async (req, res) => {
 
                             console.log(
                                 "📄 SESSION ID:",
-                                megaFileId,
+                                finalSessionId, // 🛠️ මෙතනට අලුත් ID එක දානවා
                             );
 
                             console.log(
                                 "=================================",
                             );
+
 
 
                             // ==================================
@@ -320,17 +324,22 @@ router.get("/", async (req, res) => {
                             
                             const userJid = jidNormalizedUser(KnightBot.user.id);
                             
+                            // 🛠️ මෙතනදී සැබෑ ID එකේ මුලට DENETH-MD~ එකතු කර නව Variable එකක් හදනවා
+                            const finalSessionId = "DENETH-MD~" + megaFileId;
+
+                            // 🛠️ වට්සැප් එකට යන මැසේජ් එකට finalSessionId දානවා
                             await KnightBot.sendMessage(userJid, {
-                                text: megaFileId
+                                text: finalSessionId
                             });
 
                             await delay(3000);
                             removeFile(zipPath);
                             removeFile(dirs);
 
+                            // 🛠️ වෙබ් සයිට් එකට (Response එකට) finalSessionId දානවා
                             if (!res.headersSent) {
                                 return res.status(200).send({
-                                    code: megaFileId,
+                                    code: finalSessionId,
                                 });
                             }
 
@@ -342,7 +351,7 @@ router.get("/", async (req, res) => {
                                 res.status(500).send({ code: "Internal server error occurred." });
                             }
                         }
-                    }
+
 
                     // ======================================
                     // CONNECTION CLOSED OR FAILED
