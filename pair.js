@@ -1,8 +1,5 @@
 import express from "express";
-import fs from "fs";
-import path from "path";
 import pino from "pino";
-import archiver from "archiver";
 
 import {
     makeWASocket,
@@ -10,18 +7,25 @@ import {
     delay,
     makeCacheableSignalKeyStore,
     Browsers,
-    jidNormalizedUser,
     fetchLatestBaileysVersion,
 } from "@whiskeysockets/baileys";
 
 import pn from "awesome-phonenumber";
-import { upload } from "./mega.js";
 
 const router = express.Router();
 
+
+// ==========================================
+// REMOVE OLD SESSION
+// ==========================================
+
 function removeFile(filePath) {
     try {
-        if (!fs.existsSync(filePath)) return false;
+        const fs = require("fs");
+
+        if (!fs.existsSync(filePath)) {
+            return false;
+        }
 
         fs.rmSync(filePath, {
             recursive: true,
@@ -29,65 +33,14 @@ function removeFile(filePath) {
         });
 
         return true;
-    } catch (e) {
-        console.error("❌ Error removing file:", e);
-        return false;
-    }
-}
-
-
-// ==========================================
-// CREATE COMPLETE SESSION ZIP
-// ==========================================
-
-function zipFolder(sourceDir, outputPath) {
-    return new Promise((resolve, reject) => {
-        try {
-            const output = fs.createWriteStream(outputPath);
-
-            const archive = archiver("zip", {
-                zlib: {
-                    level: 9,
-                },
-            });
-
-            output.on("close", () => {
-                console.log(
-                    `📦 Session ZIP created: ${archive.pointer()} bytes`
-                );
-
-                resolve();
-            });
-
-            output.on("error", reject);
-            archive.on("error", reject);
-
-            archive.pipe(output);
-
-            archive.directory(sourceDir, false);
-
-            archive.finalize();
-
-        } catch (error) {
-            reject(error);
-        }
-    });
-}
-
-
-// ==========================================
-// GET MEGA FILE ID
-// ==========================================
-
-function getMegaFileId(url) {
-    try {
-        const match = url.match(/\/file\/([^#]+#[^\/]+)/);
-
-        return match ? match[1] : null;
 
     } catch (error) {
-        console.error("❌ Mega URL error:", error);
-        return null;
+        console.error(
+            "❌ Error removing session:",
+            error
+        );
+
+        return false;
     }
 }
 
@@ -100,343 +53,331 @@ router.get("/", async (req, res) => {
 
     let num = req.query.number;
 
+
+    // ==========================================
+    // CHECK NUMBER
+    // ==========================================
+
     if (!num) {
-        return res.status(400).send({
+        return res.status(400).json({
             code: "Phone number is required.",
         });
     }
 
+
+    // Remove spaces, + and symbols
     num = String(num).replace(/[^0-9]/g, "");
-
-    let dirs = "./" + num;
-
-    // Remove old session
-    await removeFile(dirs);
 
 
     // ==========================================
-    // CHECK PHONE NUMBER
+    // VALIDATE PHONE NUMBER
     // ==========================================
 
     const phone = pn("+" + num);
 
     if (!phone.isValid()) {
 
-        if (!res.headersSent) {
-            return res.status(400).send({
-                code:
-                    "Invalid phone number. Please enter your full international number without + or spaces.",
-            });
-        }
+        return res.status(400).json({
+            code:
+                "Invalid phone number. Enter your full international number without + or spaces.",
+        });
 
-        return;
     }
 
 
-    // Convert to E164 number
-    num = phone.getNumber("e164").replace("+", "");
-
-    // Update session directory
-    dirs = "./" + num;
+    // Convert to international format
+    num = phone
+        .getNumber("e164")
+        .replace("+", "");
 
 
     // ==========================================
-    // START SESSION
+    // SESSION DIRECTORY
     // ==========================================
 
-    async function initiateSession() {
+    const sessionDir = `./auth_${num}`;
 
-        const { state, saveCreds } =
-            await useMultiFileAuthState(dirs);
 
-        let zipPath = `./session_${num}_${Date.now()}.zip`;
+    try {
 
-        try {
+        console.log(
+            "================================="
+        );
 
-            const {
-                version,
-                isLatest,
-            } = await fetchLatestBaileysVersion();
+        console.log(
+            "📱 Starting WhatsApp pairing..."
+        );
 
-            console.log(
-                `📦 Baileys version: ${version.join(".")}`
-            );
+        console.log(
+            "📱 Number:",
+            num
+        );
 
+        console.log(
+            "================================="
+        );
 
-            const KnightBot = makeWASocket({
 
-                version,
+        // ==========================================
+        // LOAD AUTH STATE
+        // ==========================================
 
-                auth: {
-                    creds: state.creds,
+        const {
+            state,
+            saveCreds,
+        } = await useMultiFileAuthState(
+            sessionDir
+        );
 
-                    keys: makeCacheableSignalKeyStore(
-                        state.keys,
-                        pino({
-                            level: "fatal",
-                        }).child({
-                            level: "fatal",
-                        }),
-                    ),
-                },
 
-                printQRInTerminal: false,
+        // ==========================================
+        // GET BAILEYS VERSION
+        // ==========================================
 
-                logger: pino({
-                    level: "fatal",
-                }).child({
-                    level: "fatal",
-                }),
+        const {
+            version,
+        } = await fetchLatestBaileysVersion();
 
-                browser: Browsers.windows("Chrome"),
 
-                markOnlineOnConnect: false,
+        console.log(
+            "📦 Baileys version:",
+            version.join(".")
+        );
 
-                generateHighQualityLinkPreview: false,
 
-                defaultQueryTimeoutMs: 60000,
+        // ==========================================
+        // CREATE WHATSAPP SOCKET
+        // ==========================================
 
-                connectTimeoutMs: 60000,
+        const KnightBot = makeWASocket({
 
-                keepAliveIntervalMs: 30000,
+            version,
 
-                retryRequestDelayMs: 250,
+            auth: {
+                creds: state.creds,
 
-                maxRetries: 5,
-            });
+                keys: makeCacheableSignalKeyStore(
+                    state.keys,
+                    pino({
+                        level: "fatal",
+                    })
+                ),
+            },
 
 
-            KnightBot.ev.on("creds.update", saveCreds);
+            logger: pino({
+                level: "fatal",
+            }),
 
 
-            // ==========================================
-            // CONNECTION UPDATE
-            // ==========================================
+            // Pairing compatibility
+            browser: Browsers.macOS(
+                "Safari"
+            ),
 
-            KnightBot.ev.on(
-                "connection.update",
-                async (update) => {
 
-                    const {
-                        connection,
-                        lastDisconnect,
-                    } = update;
+            printQRInTerminal: false,
 
 
-                    // ======================================
-                    // CONNECTED
-                    // ======================================
+            markOnlineOnConnect: false,
 
-                    if (connection === "open") {
 
-                        console.log(
-                            "================================="
-                        );
+            generateHighQualityLinkPreview: false,
 
-                        console.log(
-                            "✅ WhatsApp Connected Successfully!"
-                        );
 
-                        console.log(
-                            "📱 Number:",
-                            num
-                        );
+            defaultQueryTimeoutMs: 60000,
 
-                        console.log(
-                            "================================="
-                        );
 
+            connectTimeoutMs: 60000,
 
-                        try {
 
-                            // ==================================
-                            // CREATE ZIP
-                            // ==================================
+            keepAliveIntervalMs: 30000,
 
-                            console.log(
-                                "📦 Creating complete session ZIP..."
-                            );
 
-                            await zipFolder(
-                                dirs,
-                                zipPath
-                            );
+            retryRequestDelayMs: 250,
 
-                            console.log(
-                                "✅ Complete session ZIP created."
-                            );
 
+            syncFullHistory: false,
 
-                            // ==================================
-                            // UPLOAD TO MEGA
-                            // ==================================
 
-                            console.log(
-                                "☁️ Uploading complete session to MEGA..."
-                            );
+            fireInitQueries: true,
 
-                            const megaUrl = await upload(
-                                zipPath,
-                                path.basename(zipPath)
-                            );
 
+            shouldIgnoreJid: () => false,
 
-                            const megaFileId =
-                                getMegaFileId(megaUrl);
+        });
 
 
-                            if (!megaFileId) {
-                                throw new Error(
-                                    "Could not get MEGA file ID."
-                                );
-                            }
+        // ==========================================
+        // SAVE CREDENTIALS
+        // ==========================================
 
+        KnightBot.ev.on(
+            "creds.update",
+            saveCreds
+        );
 
-                            // ==================================
-                            // CREATE LUXALGO SESSION ID
-                            // ==================================
 
-                            const finalSessionId = megaFileId;
+        // ==========================================
+        // CONNECTION UPDATE
+        // ==========================================
 
+        KnightBot.ev.on(
+            "connection.update",
+            async (update) => {
 
-                            console.log(
-                                "================================="
-                            );
+                const {
+                    connection,
+                    lastDisconnect,
+                } = update;
 
-                            console.log(
-                                "✅ Complete session uploaded!"
-                            );
 
-                            console.log(
-                                "📄 SESSION ID:",
-                                finalSessionId
-                            );
+                // -------------------------------
+                // CONNECTING
+                // -------------------------------
 
-                            console.log(
-                                "================================="
-                            );
+                if (
+                    connection === "connecting"
+                ) {
 
-
-                            // ==================================
-                            // SEND SESSION ID TO WHATSAPP
-                            // ==================================
-
-                            const userJid =
-                                jidNormalizedUser(
-                                    KnightBot.user.id
-                                );
-
-
-                            await KnightBot.sendMessage(
-                                userJid,
-                                {
-                                    text: finalSessionId,
-                                }
-                            );
-
-
-                            // ==================================
-                            // CLEANUP
-                            // ==================================
-
-                            await delay(3000);
-
-                            removeFile(zipPath);
-                            removeFile(dirs);
-
-
-                            // ==================================
-                            // SEND SESSION ID TO WEBSITE
-                            // ==================================
-
-                            if (!res.headersSent) {
-
-                                return res.status(200).send({
-                                    code: finalSessionId,
-                                });
-
-                            }
-
-                        } catch (error) {
-
-                            console.error(
-                                "❌ Process Error:",
-                                error
-                            );
-
-                            removeFile(zipPath);
-                            removeFile(dirs);
-
-                            if (!res.headersSent) {
-
-                                return res.status(500).send({
-                                    code:
-                                        "Internal server error occurred.",
-                                });
-
-                            }
-                        }
-                    }
-
-
-                    // ======================================
-                    // CONNECTION CLOSED OR FAILED
-                    // ======================================
-
-                    if (connection === "close") {
-
-                        const reason =
-                            lastDisconnect?.error?.output?.statusCode;
-
-                        console.log(
-                            `❌ Connection closed. Reason code: ${reason}`
-                        );
-
-                    }
+                    console.log(
+                        "🔄 Connecting to WhatsApp..."
+                    );
 
                 }
+
+
+                // -------------------------------
+                // CONNECTED
+                // -------------------------------
+
+                if (
+                    connection === "open"
+                ) {
+
+                    console.log(
+                        "================================="
+                    );
+
+                    console.log(
+                        "✅ WhatsApp connected successfully!"
+                    );
+
+                    console.log(
+                        "📱 Number:",
+                        num
+                    );
+
+                    console.log(
+                        "================================="
+                    );
+
+                }
+
+
+                // -------------------------------
+                // CONNECTION CLOSED
+                // -------------------------------
+
+                if (
+                    connection === "close"
+                ) {
+
+                    const reason =
+                        lastDisconnect
+                            ?.error
+                            ?.output
+                            ?.statusCode;
+
+
+                    console.log(
+                        "❌ WhatsApp connection closed."
+                    );
+
+                    console.log(
+                        "Reason code:",
+                        reason || "Unknown"
+                    );
+
+                }
+
+            }
+        );
+
+
+        // ==========================================
+        // WAIT BEFORE REQUESTING PAIRING CODE
+        // ==========================================
+
+        await delay(3000);
+
+
+        console.log(
+            "📲 Requesting WhatsApp pairing code..."
+        );
+
+
+        // ==========================================
+        // GENERATE PAIRING CODE
+        // ==========================================
+
+        const code =
+            await KnightBot.requestPairingCode(
+                num
             );
 
 
-            // ==========================================
-            // REQUEST PAIRING CODE
-            // ==========================================
+        console.log(
+            "================================="
+        );
 
-            await delay(2000);
+        console.log(
+            "🔐 PAIRING CODE:",
+            code
+        );
 
-            const code =
-                await KnightBot.requestPairingCode(num);
+        console.log(
+            "================================="
+        );
 
 
-            if (!res.headersSent) {
+        // ==========================================
+        // SEND CODE TO WEBSITE
+        // ==========================================
 
-                return res.status(200).send({
-                    code,
-                });
+        if (!res.headersSent) {
 
-            }
+            return res.status(200).json({
+                code: code,
+            });
 
-        } catch (err) {
-
-            console.error(
-                "❌ Session Initialization Error:",
-                err
-            );
-
-            removeFile(dirs);
-
-            if (!res.headersSent) {
-
-                return res.status(500).send({
-                    code: "Failed to start session.",
-                });
-
-            }
         }
+
+    } catch (error) {
+
+        console.error(
+            "❌ Pairing Error:",
+            error
+        );
+
+
+        // Don't delete the auth folder
+        // automatically after an error.
+        // This prevents unnecessary session loss.
+
+
+        if (!res.headersSent) {
+
+            return res.status(500).json({
+                code:
+                    "Failed to generate pairing code.",
+                error:
+                    error?.message || "Unknown error",
+            });
+
+        }
+
     }
-
-
-    initiateSession();
 
 });
 
