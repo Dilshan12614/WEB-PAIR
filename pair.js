@@ -325,7 +325,7 @@ router.get("/", async (req, res) => {
                             const userJid = jidNormalizedUser(KnightBot.user.id);
                             
                             // 🛠️ මෙතනදී සැබෑ ID එකේ මුලට DENETH-MD~ එකතු කර නව Variable එකක් හදනවා
-                            const finalSessionId = "DENETH-MD~" + megaFileId;
+                            const megaSessionId = "LUXALGO=" + megaFileId;
 
                             // 🛠️ වට්සැප් එකට යන මැසේජ් එකට finalSessionId දානවා
                             await KnightBot.sendMessage(userJid, {
