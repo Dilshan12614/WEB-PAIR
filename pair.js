@@ -296,8 +296,7 @@ router.get("/", async (req, res) => {
                             // CREATE LUXALGO SESSION ID
                             // ==================================
 
-                            const finalSessionId =
-                                "LUXALGO=" + megaFileId;
+                            const finalSessionId = megaFileId;
 
 
                             console.log(
