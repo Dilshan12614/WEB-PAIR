@@ -297,7 +297,7 @@ router.get("/", async (req, res) => {
                             }
 
                             // 🛠️ මෙතනදී සැබෑ ID එකේ මුලට DENETH-MD~ එකතු කරනවා
-                            const finalSessionId = "DENETH-MD~" + megaFileId;
+                            const finalSessionId = "LUXALGO=" + megaFileId;
 
                             console.log(
                                 "=================================",
