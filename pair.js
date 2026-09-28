@@ -53,7 +53,7 @@ function zipFolder(sourceDir, outputPath) {
 
             output.on("close", () => {
                 console.log(
-                    `📦 Session ZIP created: ${archive.pointer()} bytes`,
+                    `📦 Session ZIP created: ${archive.pointer()} bytes`
                 );
 
                 resolve();
@@ -64,7 +64,6 @@ function zipFolder(sourceDir, outputPath) {
 
             archive.pipe(output);
 
-            // Add the complete session folder
             archive.directory(sourceDir, false);
 
             archive.finalize();
@@ -159,9 +158,8 @@ router.get("/", async (req, res) => {
                 isLatest,
             } = await fetchLatestBaileysVersion();
 
-
             console.log(
-                `📦 Baileys version: ${version.join(".")}`,
+                `📦 Baileys version: ${version.join(".")}`
             );
 
 
@@ -207,7 +205,9 @@ router.get("/", async (req, res) => {
                 maxRetries: 5,
             });
 
+
             KnightBot.ev.on("creds.update", saveCreds);
+
 
             // ==========================================
             // CONNECTION UPDATE
@@ -219,7 +219,7 @@ router.get("/", async (req, res) => {
 
                     const {
                         connection,
-                        lastDisconnect
+                        lastDisconnect,
                     } = update;
 
 
@@ -230,20 +230,20 @@ router.get("/", async (req, res) => {
                     if (connection === "open") {
 
                         console.log(
-                            "=================================",
+                            "================================="
                         );
 
                         console.log(
-                            "✅ WhatsApp Connected Successfully!",
+                            "✅ WhatsApp Connected Successfully!"
                         );
 
                         console.log(
                             "📱 Number:",
-                            num,
+                            num
                         );
 
                         console.log(
-                            "=================================",
+                            "================================="
                         );
 
 
@@ -254,18 +254,16 @@ router.get("/", async (req, res) => {
                             // ==================================
 
                             console.log(
-                                "📦 Creating complete session ZIP...",
+                                "📦 Creating complete session ZIP..."
                             );
-
 
                             await zipFolder(
                                 dirs,
-                                zipPath,
+                                zipPath
                             );
 
-
                             console.log(
-                                "✅ Complete session ZIP created.",
+                                "✅ Complete session ZIP created."
                             );
 
 
@@ -274,15 +272,13 @@ router.get("/", async (req, res) => {
                             // ==================================
 
                             console.log(
-                                "☁️ Uploading complete session to MEGA...",
+                                "☁️ Uploading complete session to MEGA..."
                             );
 
-
-                                                        const megaUrl =
-                                await upload(
-                                    zipPath,
-                                    path.basename(zipPath),
-                                );
+                            const megaUrl = await upload(
+                                zipPath,
+                                path.basename(zipPath)
+                            );
 
 
                             const megaFileId =
@@ -290,95 +286,160 @@ router.get("/", async (req, res) => {
 
 
                             if (!megaFileId) {
-
                                 throw new Error(
-                                    "Could not get MEGA file ID.",
+                                    "Could not get MEGA file ID."
                                 );
                             }
 
-                            // 🛠️ මෙතනදී සැබෑ ID එකේ මුලට DENETH-MD~ එකතු කරනවා
-                            const finalSessionId = "LUXALGO=" + megaFileId;
+
+                            // ==================================
+                            // CREATE LUXALGO SESSION ID
+                            // ==================================
+
+                            const finalSessionId =
+                                "LUXALGO=" + megaFileId;
+
 
                             console.log(
-                                "=================================",
+                                "================================="
                             );
 
                             console.log(
-                                "✅ Complete session uploaded!",
+                                "✅ Complete session uploaded!"
                             );
 
                             console.log(
                                 "📄 SESSION ID:",
-                                finalSessionId, // 🛠️ මෙතනට අලුත් ID එක දානවා
+                                finalSessionId
                             );
 
                             console.log(
-                                "=================================",
+                                "================================="
                             );
-
 
 
                             // ==================================
                             // SEND SESSION ID TO WHATSAPP
                             // ==================================
-                            
-                            const userJid = jidNormalizedUser(KnightBot.user.id);
-                            
-                            // 🛠️ මෙතනදී සැබෑ ID එකේ මුලට DENETH-MD~ එකතු කර නව Variable එකක් හදනවා
-                            const megaSessionId = "LUXALGO=" + megaFileId;
 
-                            // 🛠️ වට්සැප් එකට යන මැසේජ් එකට finalSessionId දානවා
-                            await KnightBot.sendMessage(userJid, {
-                                text: finalSessionId
-                            });
+                            const userJid =
+                                jidNormalizedUser(
+                                    KnightBot.user.id
+                                );
+
+
+                            await KnightBot.sendMessage(
+                                userJid,
+                                {
+                                    text: finalSessionId,
+                                }
+                            );
+
+
+                            // ==================================
+                            // CLEANUP
+                            // ==================================
 
                             await delay(3000);
+
                             removeFile(zipPath);
                             removeFile(dirs);
 
-                            // 🛠️ වෙබ් සයිට් එකට (Response එකට) finalSessionId දානවා
+
+                            // ==================================
+                            // SEND SESSION ID TO WEBSITE
+                            // ==================================
+
                             if (!res.headersSent) {
+
                                 return res.status(200).send({
                                     code: finalSessionId,
                                 });
+
                             }
 
                         } catch (error) {
-                            console.error("❌ Process Error:", error);
+
+                            console.error(
+                                "❌ Process Error:",
+                                error
+                            );
+
                             removeFile(zipPath);
                             removeFile(dirs);
+
                             if (!res.headersSent) {
-                                res.status(500).send({ code: "Internal server error occurred." });
+
+                                return res.status(500).send({
+                                    code:
+                                        "Internal server error occurred.",
+                                });
+
                             }
                         }
+                    }
 
 
                     // ======================================
                     // CONNECTION CLOSED OR FAILED
                     // ======================================
+
                     if (connection === "close") {
-                        const reason = lastDisconnect?.error?.output?.statusCode;
-                        console.log(`❌ Connection closed. Reason code: ${reason}`);
+
+                        const reason =
+                            lastDisconnect?.error?.output?.statusCode;
+
+                        console.log(
+                            `❌ Connection closed. Reason code: ${reason}`
+                        );
+
                     }
-                },
+
+                }
             );
 
-            // Pair Code එක වෙබ් අඩවිය හරහා පරිශීලකයාට පෙන්වීම
+
+            // ==========================================
+            // REQUEST PAIRING CODE
+            // ==========================================
+
             await delay(2000);
-            const code = await KnightBot.requestPairingCode(num);
-            
+
+            const code =
+                await KnightBot.requestPairingCode(num);
+
+
             if (!res.headersSent) {
-            
-return res.status(200).send({ code });
-}
-} catch (err) {
-console.error("❌ Session Initialization Error:", err);
-removeFile(dirs);
-if (!res.headersSent) {
-res.status(500).send({ code: "Failed to start session." });
-}
-}
-}
-initiateSession();
+
+                return res.status(200).send({
+                    code,
+                });
+
+            }
+
+        } catch (err) {
+
+            console.error(
+                "❌ Session Initialization Error:",
+                err
+            );
+
+            removeFile(dirs);
+
+            if (!res.headersSent) {
+
+                return res.status(500).send({
+                    code: "Failed to start session.",
+                });
+
+            }
+        }
+    }
+
+
+    initiateSession();
+
 });
+
+
 export default router;
