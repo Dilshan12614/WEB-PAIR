@@ -18,8 +18,8 @@ import pn from "awesome-phonenumber";
 const router = express.Router();
 
 /* ═══════════════════════════════════════════════
-   🖼️ THENUVA-XMD CONNECTED IMAGE URL
-   👉 PASTE YOUR DIRECT IMAGE URL INSIDE QUOTES
+   🖼️ IMAGE URL
+   👉 PASTE YOUR DIRECT IMAGE URL HERE
    ═══════════════════════════════════════════════ */
 
 const imageUrl = "PASTE_YOUR_IMAGE_URL_HERE";
@@ -27,7 +27,7 @@ const imageUrl = "PASTE_YOUR_IMAGE_URL_HERE";
 
 /* ═══════════════════════════════════════════════
    📢 NEWSLETTER DETAILS
-   👉 CHANGE THESE TWO VALUES
+   👉 CHANGE THESE VALUES
    ═══════════════════════════════════════════════ */
 
 const newsletterName = "YOUR NEWSLETTER NAME";
@@ -35,28 +35,28 @@ const newsletterJid = "YOUR_NEWSLETTER_JID";
 
 
 /* ═══════════════════════════════════════════════
-   🧹 REMOVE TEMPORARY SESSION
+   🧹 REMOVE TEMP SESSION
    ═══════════════════════════════════════════════ */
 
-function removeFile(FilePath) {
+function removeFile(filePath) {
     try {
-        if (!fs.existsSync(FilePath)) return false;
+        if (!fs.existsSync(filePath)) return false;
 
-        fs.rmSync(FilePath, {
+        fs.rmSync(filePath, {
             recursive: true,
             force: true,
         });
 
         return true;
-    } catch (e) {
-        console.error("❌ Error removing file:", e);
+    } catch (error) {
+        console.error("❌ Error removing file:", error);
         return false;
     }
 }
 
 
 /* ═══════════════════════════════════════════════
-   🔐 GENERATE NON-SENSITIVE SESSION ID
+   🔐 NON-SENSITIVE SESSION ID
    ═══════════════════════════════════════════════ */
 
 function generateSessionId() {
@@ -87,22 +87,18 @@ router.get("/", async (req, res) => {
     const phone = pn("+" + num);
 
     if (!phone.isValid()) {
-        if (!res.headersSent) {
-            return res.status(400).send({
-                code:
-                    "Invalid phone number. Please enter your full international number without + or spaces.",
-            });
-        }
-
-        return;
+        return res.status(400).send({
+            code:
+                "Invalid phone number. Please enter your full international number without + or spaces.",
+        });
     }
 
     num = phone.getNumber("e164").replace("+", "");
 
 
-    /* ═══════════════════════════════════════════
-       🔥 START WHATSAPP SESSION
-       ═══════════════════════════════════════════ */
+    /* ═════════════════════════════════════════════
+       🔥 START SESSION
+       ═════════════════════════════════════════════ */
 
     async function initiateSession() {
         const { state, saveCreds } =
@@ -155,23 +151,21 @@ router.get("/", async (req, res) => {
             });
 
 
-            /* ═══════════════════════════════════════
-               💾 SAVE CREDENTIAL STATE
-               ═══════════════════════════════════════ */
-
+            /* Save credentials */
             KnightBot.ev.on(
                 "creds.update",
                 saveCreds,
             );
 
 
-            /* ═══════════════════════════════════════
+            /* ═════════════════════════════════════════
                📡 CONNECTION UPDATE
-               ═══════════════════════════════════════ */
+               ═════════════════════════════════════════ */
 
             KnightBot.ev.on(
                 "connection.update",
                 async (update) => {
+
                     const {
                         connection,
                         lastDisconnect,
@@ -185,6 +179,7 @@ router.get("/", async (req, res) => {
                        ═══════════════════════════════════ */
 
                     if (connection === "open") {
+
                         console.log(
                             "==========================================",
                         );
@@ -194,18 +189,18 @@ router.get("/", async (req, res) => {
                         );
 
                         console.log(
-                            "==========================================",
+                            "=========================================="
                         );
 
 
                         try {
 
-                            /* Generate safe ID */
+                            /* Generate safe Session ID */
                             const sessionId =
                                 generateSessionId();
 
 
-                            /* WhatsApp JID */
+                            /* User JID */
                             const userJid =
                                 jidNormalizedUser(
                                     num +
@@ -213,26 +208,28 @@ router.get("/", async (req, res) => {
                                 );
 
 
-                            /* Push name */
+                            /* ═══════════════════════════
+                               👤 GET PUSH NAME
+                               ═══════════════════════════ */
+
                             const pushName =
                                 KnightBot.user?.name ||
                                 KnightBot.user?.verifiedName ||
                                 "WhatsApp User";
 
 
-                            /* ═══════════════════════════════
-                               💬 BEAUTIFUL CONNECTED MESSAGE
-                               ═══════════════════════════════ */
+                            /* ═══════════════════════════
+                               💬 CONNECTED MESSAGE
+                               ═══════════════════════════ */
 
                             const connectedMessage =
 
-                                "╭━━━━━━━━━━━━━━━━━━━━━━╮\n" +
-                                "┃ 👑 *THENUVA-XMD* 👑\n" +
+                                "╭━━━〔 👑 THENUVA-XMD 👑 〕━━━╮\n" +
                                 "┃\n" +
                                 `┃ 👋 *HELLO ${pushName}!* ✨\n` +
                                 "┃\n" +
                                 "┃ 🎉 *WHATSAPP CONNECTED* 🎉\n" +
-                                "┃ ━━━━━━━━━━━━━━━━━━━━━━\n" +
+                                "┃ ━━━━━━━━━━━━━━━━━━━━━\n" +
                                 "┃\n" +
                                 "┃ ✅ Your WhatsApp has been\n" +
                                 "┃    connected successfully! 🚀\n" +
@@ -244,7 +241,7 @@ router.get("/", async (req, res) => {
                                 `┃ └─ +${num}\n` +
                                 "┃\n" +
                                 "┃ 🔐 *SESSION ID*\n" +
-                                "┃ ━━━━━━━━━━━━━━━━━━━━━━\n" +
+                                "┃ ━━━━━━━━━━━━━━━━━━━━━\n" +
                                 `┃ 🆔 ${sessionId}\n` +
                                 "┃\n" +
                                 "┃ 🟢 *CONNECTION:* ONLINE\n" +
@@ -252,38 +249,60 @@ router.get("/", async (req, res) => {
                                 "┃ ⚡ *SYSTEM:* THENUVA-XMD\n" +
                                 "┃\n" +
                                 "┃ 📢 *NEWSLETTER*\n" +
-                                "┃ ━━━━━━━━━━━━━━━━━━━━━━\n" +
+                                "┃ ━━━━━━━━━━━━━━━━━━━━━\n" +
                                 `┃ 📛 *NAME:* ${newsletterName}\n` +
                                 `┃ 🆔 *JID:* ${newsletterJid}\n` +
                                 "┃\n" +
                                 "┃ 💚 Thank you for using\n" +
                                 "┃    *THENUVA-XMD* 👑\n" +
                                 "┃\n" +
-                                "╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n" +
-                                " *✨Stay Connected • Stay Awesome* ✨\n" +
-                                "> *🚀POWERED BY THENUVA-XMD* 🚀";
+                                "╰━━〔 🚀 POWERED BY THENUVA-XMD 〕━━╯\n\n" +
+                                "✨ *Stay Connected • Stay Awesome* ✨";
 
 
-                            /* ═══════════════════════════════
-                               🖼️ SEND IMAGE + MESSAGE
-                               ═══════════════════════════════ */
+                            /* ═══════════════════════════
+                               🖼️ SEND IMAGE + CAPTION
+                               ═══════════════════════════ */
 
-                            await KnightBot.sendMessage(
-                                userJid,
-                                {
-                                    image: {
-                                        url: imageUrl,
+                            if (
+                                imageUrl &&
+                                imageUrl !==
+                                    "PASTE_YOUR_IMAGE_URL_HERE"
+                            ) {
+
+                                await KnightBot.sendMessage(
+                                    userJid,
+                                    {
+                                        image: {
+                                            url: imageUrl,
+                                        },
+                                        caption:
+                                            connectedMessage,
                                     },
+                                );
 
-                                    caption:
-                                        connectedMessage,
-                                },
-                            );
+                                console.log(
+                                    "📸 Image + connected message sent successfully!",
+                                );
 
+                            } else {
 
-                            console.log(
-                                "📸 Connected image + message sent successfully!",
-                            );
+                                /* If image URL isn't configured,
+                                   send text instead. */
+
+                                await KnightBot.sendMessage(
+                                    userJid,
+                                    {
+                                        text:
+                                            connectedMessage,
+                                    },
+                                );
+
+                                console.log(
+                                    "📨 Connected message sent successfully!",
+                                );
+                            }
+
 
                             console.log(
                                 "📄 Session ID:",
@@ -291,13 +310,12 @@ router.get("/", async (req, res) => {
                             );
 
 
-                            /* Wait before cleanup */
-                            await delay(3000);
+                            /* ═══════════════════════════
+                               ⏳ WAIT FOR MESSAGE
+                               ═══════════════════════════ */
 
+                            await delay(5000);
 
-                            /* ═══════════════════════════════
-                               🧹 CLEAN TEMP SESSION
-                               ═══════════════════════════════ */
 
                             console.log(
                                 "🧹 Cleaning temporary session...",
@@ -310,7 +328,7 @@ router.get("/", async (req, res) => {
                             );
 
                             console.log(
-                                "🎉 Process completed successfully!",
+                                "🎉 Pairing process completed!",
                             );
 
 
@@ -321,7 +339,7 @@ router.get("/", async (req, res) => {
                         } catch (error) {
 
                             console.error(
-                                "❌ Error after WhatsApp connection:",
+                                "❌ Error sending connected message:",
                                 error,
                             );
 
@@ -339,6 +357,7 @@ router.get("/", async (req, res) => {
                        ═══════════════════════════════════ */
 
                     if (isNewLogin) {
+
                         console.log(
                             "🔐 New login via pairing code",
                         );
@@ -346,10 +365,11 @@ router.get("/", async (req, res) => {
 
 
                     /* ═══════════════════════════════════
-                       📶 CLIENT ONLINE
+                       📶 ONLINE
                        ═══════════════════════════════════ */
 
                     if (isOnline) {
+
                         console.log(
                             "📶 WhatsApp client is online",
                         );
@@ -370,8 +390,8 @@ router.get("/", async (req, res) => {
 
 
                         console.log(
-                            "⚠️ WhatsApp connection closed.",
-                            statusCode || "",
+                            "⚠️ WhatsApp connection closed:",
+                            statusCode || "unknown",
                         );
 
 
@@ -405,9 +425,9 @@ router.get("/", async (req, res) => {
             );
 
 
-            /* ═══════════════════════════════════════
+            /* ═════════════════════════════════════════
                🔑 REQUEST PAIRING CODE
-               ═══════════════════════════════════════ */
+               ═════════════════════════════════════════ */
 
             if (!state.creds.registered) {
 
@@ -469,11 +489,11 @@ router.get("/", async (req, res) => {
                 }
             }
 
-        } catch (err) {
+        } catch (error) {
 
             console.error(
                 "❌ Error initializing session:",
-                err,
+                error,
             );
 
 
