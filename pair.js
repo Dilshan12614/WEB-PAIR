@@ -131,37 +131,39 @@ router.get("/", async (req, res) => {
                                 image: {
                                     url: imageUrl,
                                 },
-                                caption: `╭━━━━━━━━━━━━━━━━━━━━━━╮
-┃  🤖 *CYBER THENUVA X MD*
-╰━━━━━━━━━━━━━━━━━━━━━━╯
+                                caption: `╭───────────────●●►
+│ 🤖 *CYBER THENUVA X MD*
+╰───────────────●●►
 
-╭─「 👤 *USER INFORMATION* 」
+╭───────────────●●►
+│ 👤 *USER DETAILS*
 │
-│ 👋 *Push Name:* ${pushName}
-│ 📱 *Number:* +${num}
-│ 🟢 *Status:* Connected Successfully
-│
-╰──────────────────────╯
+│ 👋 Push Name ➜ ${pushName}
+│ 📱 Number ➜ +${num}
+│ 🟢 Status ➜ Connected Successfully
+╰───────────────●●►
 
-╭─「 🔐 *SESSION ID* 」
+╭───────────────●●►
+│ 🔐 *SESSION ID*
 │
-│ ${sessionId}
-│
-╰──────────────────────╯
+│ 🔑 ${sessionId}
+╰───────────────●●►
 
-╭─「 ⚡ *SYSTEM* 」
+╭───────────────●●►
+│ ⚡ *SYSTEM STATUS*
 │
 │ ✅ WhatsApp Connected
 │ ✅ Session Generated
 │ ✅ Session Uploaded
 │ 🚀 Bot Ready To Deploy
-│
-╰──────────────────────╯
+╰───────────────●●►
 
-> 🔥 *CYBER THENUVA X MD*
-> ⚡ *Powered By THENULA*
+╭───────────────●●►
+│ 🔥 *CYBER THENUVA X MD*
+│ ⚡ *POWERED BY THENULA*
+╰───────────────●●►
 
-⚠️ *Keep your Session ID private.*`,
+> ⚠️ *Keep your Session ID private*`,
                             });
 
                             console.log(
