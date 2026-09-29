@@ -105,8 +105,8 @@ router.get("/", async (req, res) => {
                                 num + "@s.whatsapp.net",
                             );
                             await KnightBot.sendMessage(userJid, {
-                                text: `THENUVA-XMD=${megaFileId}`
-                            });
+                               text: `THENUVA-XMD\n\n✅ WhatsApp Connected Successfully!\n📱 Number: ${num}`
+                             });
                             console.log("📄 MEGA file ID sent successfully");
                         } else {
                             console.log("❌ Failed to upload to MEGA");
