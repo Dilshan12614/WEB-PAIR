@@ -1,58 +1,71 @@
 import * as mega from "megajs";
 import fs from "fs";
 
-// Mega authentication credentials
 const auth = {
-    email: "dilshanashinsa93@gmail.com", // your mega account login email
-    password: "Rathnayake", // your mega account login password
+    email: process.env.MEGA_EMAIL,
+    password: process.env.MEGA_PASSWORD,
     userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
 };
 
-export const upload = (filePath, fileName) => {
+function createStorage() {
+    if (!auth.email || !auth.password) {
+        throw new Error("MEGA_EMAIL or MEGA_PASSWORD is missing in Secrets.");
+    }
+
     return new Promise((resolve, reject) => {
-        try {
-            const storage = new mega.Storage(auth, (err) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
+        const storage = new mega.Storage(auth, (err) => {
+            if (err) {
+                storage.close();
+                reject(err);
+            } else {
+                resolve(storage);
+            }
+        });
 
-                const readStream = fs.createReadStream(filePath);
+        storage.on("error", reject);
+    });
+}
 
-                const uploadStream = storage.upload({
-                    name: fileName,
-                    allowUploadBuffering: true,
-                });
+export const upload = async (filePath, fileName) => {
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`File not found: ${filePath}`);
+    }
 
-                readStream.pipe(uploadStream);
+    const storage = await createStorage();
 
-                uploadStream.on("complete", (file) => {
-                    file.link((err, url) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            storage.close();
-                            resolve(url);
-                        }
-                    });
-                });
+    return new Promise((resolve, reject) => {
+        const readStream = fs.createReadStream(filePath);
 
-                uploadStream.on("error", (error) => {
-                    reject(error);
-                });
+        const uploadStream = storage.upload({
+            name: fileName,
+            allowUploadBuffering: true,
+        });
 
-                readStream.on("error", (error) => {
-                    reject(error);
-                });
+        let finished = false;
+
+        const fail = (error) => {
+            if (finished) return;
+            finished = true;
+            storage.close();
+            reject(error);
+        };
+
+        readStream.on("error", fail);
+        uploadStream.on("error", fail);
+
+        uploadStream.on("complete", (file) => {
+            file.link((err, url) => {
+                if (err) return fail(err);
+
+                if (finished) return;
+                finished = true;
+                storage.close();
+                resolve(url);
             });
+        });
 
-            storage.on("error", (error) => {
-                reject(error);
-            });
-        } catch (err) {
-            reject(err);
-        }
+        readStream.pipe(uploadStream);
     });
 };
 
@@ -62,21 +75,20 @@ export const download = (url) => {
             const file = mega.File.fromURL(url);
 
             file.loadAttributes((err) => {
-                if (err) {
-                    reject(err);
-                    return;
-                }
+                if (err) return reject(err);
 
-                file.downloadBuffer((err, buffer) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve(buffer);
+                file.downloadBuffer((downloadError, buffer) => {
+                    if (downloadError) return reject(downloadError);
+
+                    if (!buffer || !buffer.length) {
+                        return reject(new Error("Downloaded file is empty."));
                     }
+
+                    resolve(buffer);
                 });
             });
-        } catch (err) {
-            reject(err);
+        } catch (error) {
+            reject(error);
         }
     });
 };
