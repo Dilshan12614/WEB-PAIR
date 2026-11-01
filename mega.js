@@ -2,8 +2,8 @@ import * as mega from "megajs";
 import fs from "fs";
 
 const auth = {
-    email: process.env.MEGA_EMAIL,
-    password: process.env.MEGA_PASSWORD,
+    email: "dilshanashinsa93@gmail.com", // your mega account login email
+    password: "Rathnayake",
     userAgent:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
 };
