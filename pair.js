@@ -1,384 +1,140 @@
 import express from "express";
-import fs from "fs";
-import path from "path";
 import pino from "pino";
-import archiver from "archiver";
-
 import {
     makeWASocket,
     useMultiFileAuthState,
-    delay,
-    makeCacheableSignalKeyStore,
     Browsers,
-    jidNormalizedUser,
     fetchLatestBaileysVersion,
+    DisconnectReason
 } from "@whiskeysockets/baileys";
-
-import pn from "awesome-phonenumber";
-import { upload } from "./mega.js";
+import { isValidPhoneNumber, parsePhoneNumber } from "awesome-phonenumber";
 
 const router = express.Router();
 
-function removeFile(filePath) {
+const SESSION_DIR = "./auth_info_baileys";
+
+let socket = null;
+let starting = false;
+let connected = false;
+let lastRequest = 0;
+
+const logger = pino({ level: "silent" });
+
+router.post("/", async (req, res) => {
     try {
-        if (!fs.existsSync(filePath)) return false;
-
-        fs.rmSync(filePath, {
-            recursive: true,
-            force: true,
-        });
-
-        return true;
-    } catch (e) {
-        console.error("❌ Error removing file:", e);
-        return false;
-    }
-}
-
-
-// ==========================================
-// CREATE COMPLETE SESSION ZIP
-// ==========================================
-
-function zipFolder(sourceDir, outputPath) {
-    return new Promise((resolve, reject) => {
-        try {
-            const output = fs.createWriteStream(outputPath);
-
-            const archive = archiver("zip", {
-                zlib: {
-                    level: 9,
-                },
-            });
-
-            output.on("close", () => {
-                console.log(
-                    `📦 Session ZIP created: ${archive.pointer()} bytes`,
-                );
-
-                resolve();
-            });
-
-            output.on("error", reject);
-            archive.on("error", reject);
-
-            archive.pipe(output);
-
-            // Add the complete session folder
-            archive.directory(sourceDir, false);
-
-            archive.finalize();
-
-        } catch (error) {
-            reject(error);
-        }
-    });
-}
-
-
-// ==========================================
-// GET MEGA FILE ID
-// ==========================================
-
-function getMegaFileId(url) {
-    try {
-        const match = url.match(/\/file\/([^#]+#[^\/]+)/);
-
-        return match ? match[1] : null;
-
-    } catch (error) {
-        console.error("❌ Mega URL error:", error);
-        return null;
-    }
-}
-
-
-// ==========================================
-// PAIR ROUTE
-// ==========================================
-
-router.get("/", async (req, res) => {
-
-    let num = req.query.number;
-
-    if (!num) {
-        return res.status(400).send({
-            code: "Phone number is required.",
-        });
-    }
-
-    num = String(num).replace(/[^0-9]/g, "");
-
-    let dirs = "./" + num;
-
-    // Remove old session
-    await removeFile(dirs);
-
-
-    // ==========================================
-    // CHECK PHONE NUMBER
-    // ==========================================
-
-    const phone = pn("+" + num);
-
-    if (!phone.isValid()) {
-
-        if (!res.headersSent) {
-            return res.status(400).send({
-                code:
-                    "Invalid phone number. Please enter your full international number without + or spaces.",
+        if (starting || connected) {
+            return res.status(409).json({
+                error: connected
+                    ? "WhatsApp is already connected."
+                    : "A pairing request is already running."
             });
         }
 
-        return;
-    }
+        const now = Date.now();
 
+        if (now - lastRequest < 30000) {
+            return res.status(429).json({
+                error: "Please wait 30 seconds before trying again."
+            });
+        }
 
-    // Convert to E164 number
-    num = phone.getNumber("e164").replace("+", "");
+        let number = String(req.body.number || "")
+            .replace(/[^0-9+]/g, "");
 
-    // Update session directory
-    dirs = "./" + num;
+        if (!number.startsWith("+")) {
+            number = "+" + number;
+        }
 
+        if (!isValidPhoneNumber(number)) {
+            return res.status(400).json({
+                error: "Enter a valid international phone number."
+            });
+        }
 
-    // ==========================================
-    // START SESSION
-    // ==========================================
+        const parsed = parsePhoneNumber(number);
+        const phoneNumber = parsed.number?.e164
+            ?.replace("+", "");
 
-    async function initiateSession() {
+        if (!phoneNumber) {
+            return res.status(400).json({
+                error: "Invalid phone number."
+            });
+        }
+
+        lastRequest = now;
+        starting = true;
 
         const { state, saveCreds } =
-            await useMultiFileAuthState(dirs);
-
-        let zipPath = `./session_${num}_${Date.now()}.zip`;
-
-        try {
-
-            const {
-                version,
-                isLatest,
-            } = await fetchLatestBaileysVersion();
-
-
-            console.log(
-                `📦 Baileys version: ${version.join(".")}`,
-            );
-
-
-            const KnightBot = makeWASocket({
-
-                version,
-
-                auth: {
-                    creds: state.creds,
-
-                    keys: makeCacheableSignalKeyStore(
-                        state.keys,
-                        pino({
-                            level: "fatal",
-                        }).child({
-                            level: "fatal",
-                        }),
-                    ),
-                },
-
-                printQRInTerminal: false,
-
-                logger: pino({
-                    level: "fatal",
-                }).child({
-                    level: "fatal",
-                }),
-
-                browser: Browsers.windows("Chrome"),
-
-                markOnlineOnConnect: false,
-
-                generateHighQualityLinkPreview: false,
-
-                defaultQueryTimeoutMs: 60000,
-
-                connectTimeoutMs: 60000,
-
-                keepAliveIntervalMs: 30000,
-
-                retryRequestDelayMs: 250,
-
-                maxRetries: 5,
-            });
-
-            KnightBot.ev.on("creds.update", saveCreds);
-
-            // ==========================================
-            // CONNECTION UPDATE
-            // ==========================================
-
-            KnightBot.ev.on(
-                "connection.update",
-                async (update) => {
-
-                    const {
-                        connection,
-                        lastDisconnect
-                    } = update;
-
-
-                    // ======================================
-                    // CONNECTED
-                    // ======================================
-
-                    if (connection === "open") {
-
-                        console.log(
-                            "=================================",
-                        );
-
-                        console.log(
-                            "✅ WhatsApp Connected Successfully!",
-                        );
-
-                        console.log(
-                            "📱 Number:",
-                            num,
-                        );
-
-                        console.log(
-                            "=================================",
-                        );
-
-
-                        try {
-
-                            // ==================================
-                            // CREATE ZIP
-                            // ==================================
-
-                            console.log(
-                                "📦 Creating complete session ZIP...",
-                            );
-
-
-                            await zipFolder(
-                                dirs,
-                                zipPath,
-                            );
-
-
-                            console.log(
-                                "✅ Complete session ZIP created.",
-                            );
-
-
-                            // ==================================
-                            // UPLOAD TO MEGA
-                            // ==================================
-
-                            console.log(
-                                "☁️ Uploading complete session to MEGA...",
-                            );
-
-
-                                                        const megaUrl =
-                                await upload(
-                                    zipPath,
-                                    path.basename(zipPath),
-                                );
-
-
-                            const megaFileId =
-                                getMegaFileId(megaUrl);
-
-
-                            if (!megaFileId) {
-
-                                throw new Error(
-                                    "Could not get MEGA file ID.",
-                                );
-                            }
-
-                            // 🛠️ මෙතනදී සැබෑ ID එකේ මුලට DENETH-MD~ එකතු කරනවා
-                            const finalSessionId = "DENETH-MD~" + megaFileId;
-
-                            console.log(
-                                "=================================",
-                            );
-
-                            console.log(
-                                "✅ Complete session uploaded!",
-                            );
-
-                            console.log(
-                                "📄 SESSION ID:",
-                                finalSessionId, // 🛠️ මෙතනට අලුත් ID එක දානවා
-                            );
-
-                            console.log(
-                                "=================================",
-                            );
-
-
-
-                            // ==================================
-                            // SEND SESSION ID TO WHATSAPP
-                            // ==================================
-                            
-                            const userJid = jidNormalizedUser(KnightBot.user.id);
-                            
-                            // 🛠️ මෙතනදී සැබෑ ID එකේ මුලට DENETH-MD~ එකතු කර නව Variable එකක් හදනවා
-                            const finalSessionId = "DENETH-MD~" + megaFileId;
-
-                            // 🛠️ වට්සැප් එකට යන මැසේජ් එකට finalSessionId දානවා
-                            await KnightBot.sendMessage(userJid, {
-                                text: finalSessionId
-                            });
-
-                            await delay(3000);
-                            removeFile(zipPath);
-                            removeFile(dirs);
-
-                            // 🛠️ වෙබ් සයිට් එකට (Response එකට) finalSessionId දානවා
-                            if (!res.headersSent) {
-                                return res.status(200).send({
-                                    code: finalSessionId,
-                                });
-                            }
-
-                        } catch (error) {
-                            console.error("❌ Process Error:", error);
-                            removeFile(zipPath);
-                            removeFile(dirs);
-                            if (!res.headersSent) {
-                                res.status(500).send({ code: "Internal server error occurred." });
-                            }
-                        }
-
-
-                    // ======================================
-                    // CONNECTION CLOSED OR FAILED
-                    // ======================================
-                    if (connection === "close") {
-                        const reason = lastDisconnect?.error?.output?.statusCode;
-                        console.log(`❌ Connection closed. Reason code: ${reason}`);
-                    }
-                },
-            );
-
-            // Pair Code එක වෙබ් අඩවිය හරහා පරිශීලකයාට පෙන්වීම
-            await delay(2000);
-            const code = await KnightBot.requestPairingCode(num);
-            
-            if (!res.headersSent) {
-            
-return res.status(200).send({ code });
-}
-} catch (err) {
-console.error("❌ Session Initialization Error:", err);
-removeFile(dirs);
-if (!res.headersSent) {
-res.status(500).send({ code: "Failed to start session." });
-}
-}
-}
-initiateSession();
+            await useMultiFileAuthState(SESSION_DIR);
+
+        const { version } =
+            await fetchLatestBaileysVersion();
+
+        socket = makeWASocket({
+            version,
+            auth: state,
+            logger,
+            browser: Browsers.ubuntu("Chrome"),
+            printQRInTerminal: false,
+            markOnlineOnConnect: false,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 30000
+        });
+
+        socket.ev.on("creds.update", saveCreds);
+
+        socket.ev.on("connection.update", async (update) => {
+            const { connection, lastDisconnect } = update;
+
+            if (connection === "open") {
+                connected = true;
+                starting = false;
+                console.log("DARK DILA-MD WhatsApp connected.");
+            }
+
+            if (connection === "close") {
+                connected = false;
+                starting = false;
+
+                const code =
+                    lastDisconnect?.error?.output?.statusCode;
+
+                console.log("WhatsApp connection closed:", code);
+
+                if (code === DisconnectReason.loggedOut) {
+                    console.log(
+                        "WhatsApp logged out. Remove local session before pairing again."
+                    );
+                }
+            }
+        });
+
+        const code = await socket.requestPairingCode(phoneNumber);
+
+        starting = false;
+
+        return res.json({
+            success: true,
+            code,
+            message: "Enter this code in WhatsApp Linked Devices."
+        });
+
+    } catch (error) {
+        console.error("Pairing error:", error);
+        starting = false;
+
+        return res.status(500).json({
+            error: "Could not generate Pair Code. Check the Termux logs."
+        });
+    }
 });
+
+router.get("/status", (req, res) => {
+    res.json({
+        connected,
+        starting
+    });
+});
+
 export default router;
