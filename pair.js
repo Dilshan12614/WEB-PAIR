@@ -1,110 +1,111 @@
 import express from "express";
-import pino from "pino";
-import pn from "awesome-phonenumber";
 import fs from "fs";
 import path from "path";
+import pino from "pino";
 
 import {
     makeWASocket,
     useMultiFileAuthState,
+    delay,
+    makeCacheableSignalKeyStore,
     Browsers,
     fetchLatestBaileysVersion,
-    DisconnectReason
 } from "@whiskeysockets/baileys";
+
+import pn from "awesome-phonenumber";
 
 const router = express.Router();
 
-const SESSION_DIR = path.join(process.cwd(), "auth_info_baileys");
+const logger = pino({ level: "silent" });
+const activeSessions = new Map();
 
-const logger = pino({
-    level: "silent"
-});
+const SESSION_DIR = path.resolve("./sessions");
 
-let socket = null;
-let starting = false;
-let connected = false;
-let lastRequest = 0;
+// Create session directory
+fs.mkdirSync(SESSION_DIR, { recursive: true });
 
-// Check existing session
-function hasExistingSession() {
-    const credsPath = path.join(SESSION_DIR, "creds.json");
-    return fs.existsSync(credsPath);
-}
+// ==========================================
+// PAIR CODE ROUTE
+// ==========================================
 
-// Generate Pair Code
-router.post("/", async (req, res) => {
+router.get("/", async (req, res) => {
 
-    if (starting) {
-        return res.status(409).json({
-            success: false,
-            error: "Pairing is already in progress. Please wait."
-        });
-    }
-
-    if (connected) {
-        return res.status(409).json({
-            success: false,
-            error: "WhatsApp is already connected."
-        });
-    }
-
-    if (Date.now() - lastRequest < 30000) {
-        return res.status(429).json({
-            success: false,
-            error: "Please wait 30 seconds before trying again."
-        });
-    }
-
-    let number = String(req.body.number || "")
+    let num = String(req.query.number || "")
         .replace(/[^0-9]/g, "");
 
-    if (!number) {
+    if (!num) {
         return res.status(400).json({
-            success: false,
-            error: "Please enter your WhatsApp number."
+            error: "WhatsApp number is required."
         });
     }
 
-    const phone = pn("+" + number);
+    // Validate number
+    const phone = pn("+" + num);
 
     if (!phone.isValid()) {
         return res.status(400).json({
-            success: false,
-            error: "Invalid WhatsApp phone number."
+            error: "Invalid international phone number."
         });
     }
 
-    number = phone.getNumber("e164").replace("+", "");
+    num = phone.getNumber("e164").replace("+", "");
 
-    if (hasExistingSession()) {
+    // Prevent duplicate pairing requests
+    if (activeSessions.has(num)) {
         return res.status(409).json({
-            success: false,
-            error: "An existing session was found. Remove it before pairing a different account."
+            error: "A pairing request is already active for this number."
         });
     }
 
-    lastRequest = Date.now();
-    starting = true;
+    const sessionDir = path.join(SESSION_DIR, num);
+
+    let socket;
 
     try {
 
-        const { state, saveCreds } =
-            await useMultiFileAuthState(SESSION_DIR);
+        console.log("================================");
+        console.log(" DARK DILA-MD PAIR SYSTEM");
+        console.log("================================");
+        console.log("Starting pairing for:", num);
 
+        // Authentication state
+        const { state, saveCreds } =
+            await useMultiFileAuthState(sessionDir);
+
+        if (state.creds.registered) {
+            return res.status(409).json({
+                error: "This number already has a saved WhatsApp session."
+            });
+        }
+
+        // Baileys version
         const { version } =
             await fetchLatestBaileysVersion();
 
+        console.log(
+            "Baileys Version:",
+            version.join(".")
+        );
+
+        // Create WhatsApp socket
         socket = makeWASocket({
 
             version,
 
-            auth: state,
+            auth: {
+                creds: state.creds,
+
+                keys: makeCacheableSignalKeyStore(
+                    state.keys,
+                    logger
+                )
+            },
 
             logger,
 
-            browser: Browsers.ubuntu("Chrome"),
-
             printQRInTerminal: false,
+
+            browser: Browsers.windows("Chrome"),
 
             markOnlineOnConnect: false,
 
@@ -120,109 +121,83 @@ router.post("/", async (req, res) => {
 
         });
 
+        activeSessions.set(num, socket);
+
         // Save authentication updates
         socket.ev.on("creds.update", saveCreds);
 
         // Connection events
         socket.ev.on("connection.update", (update) => {
 
-            const {
-                connection,
-                lastDisconnect
-            } = update;
-
-            if (connection === "connecting") {
-                console.log("[DARK DILA-MD] Connecting...");
-            }
+            const { connection, lastDisconnect } = update;
 
             if (connection === "open") {
 
-                connected = true;
-                starting = false;
+                console.log("================================");
+                console.log(" WhatsApp Connected Successfully");
+                console.log(" Number:", num);
+                console.log("================================");
 
-                console.log(
-                    "[DARK DILA-MD] WhatsApp Connected Successfully."
-                );
             }
 
             if (connection === "close") {
-
-                connected = false;
-                starting = false;
 
                 const reason =
                     lastDisconnect?.error?.output?.statusCode;
 
                 console.log(
-                    "[DARK DILA-MD] Connection Closed:",
-                    reason || "Unknown"
+                    "Connection closed:",
+                    reason
                 );
 
-                if (reason === DisconnectReason.loggedOut) {
-                    console.log(
-                        "[DARK DILA-MD] Account logged out. Remove local session before pairing again."
-                    );
+                if (activeSessions.get(num) === socket) {
+                    activeSessions.delete(num);
                 }
 
-                socket = null;
             }
 
         });
 
-        // Request Pair Code
-        const code = await socket.requestPairingCode(number);
+        // Wait for socket initialization
+        await delay(2000);
 
-        starting = false;
+        // Check whether request was cancelled
+        if (res.headersSent) return;
 
-        console.log("[DARK DILA-MD] Pair Code Generated.");
+        // Generate pairing code
+        const code = await socket.requestPairingCode(num);
+
+        console.log("Pair code generated successfully.");
 
         return res.status(200).json({
-
-            success: true,
-
-            code: code,
-
-            message: "Enter this code in WhatsApp Linked Devices."
-
+            code,
+            status: "success",
+            bot: "DARK DILA-MD"
         });
 
     } catch (error) {
 
         console.error(
-            "[DARK DILA-MD] Pairing Error:",
-            error
+            "Pairing Error:",
+            error.message
         );
 
-        starting = false;
-        connected = false;
-        socket = null;
+        if (socket) {
+            activeSessions.delete(num);
 
-        return res.status(500).json({
+            try {
+                socket.end(undefined);
+            } catch {}
+        }
 
-            success: false,
-
-            error: "Pair Code generation failed. Check Termux logs."
-
-        });
+        if (!res.headersSent) {
+            return res.status(500).json({
+                error: "Failed to generate pairing code. Please try again."
+            });
+        }
 
     }
 
 });
 
-// Connection status
-router.get("/status", (req, res) => {
-
-    res.json({
-
-        success: true,
-
-        connected: connected,
-
-        starting: starting
-
-    });
-
-});
-
-// Export router
 export default router;
