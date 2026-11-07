@@ -5,81 +5,83 @@ const auth = {
     email: process.env.MEGA_EMAIL,
     password: process.env.MEGA_PASSWORD,
     userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
 };
 
-export const upload = async (filePath, fileName) => {
+function checkAuth() {
     if (!auth.email || !auth.password) {
-        throw new Error("MEGA credentials are missing.");
+        throw new Error("MEGA_EMAIL or MEGA_PASSWORD is missing");
     }
+}
 
-    if (!fs.existsSync(filePath)) {
-        throw new Error("Session file does not exist.");
-    }
+export const upload = (filePath, fileName) => {
+    return new Promise((resolve, reject) => {
+        try {
+            checkAuth();
 
-    let storage;
+            if (!fs.existsSync(filePath)) {
+                return reject(new Error("File not found: " + filePath));
+            }
 
-    try {
-        storage = await new Promise((resolve, reject) => {
-            const instance = new mega.Storage(auth, error => {
-                if (error) reject(error);
-                else resolve(instance);
+            const storage = new mega.Storage(auth, (err) => {
+                if (err) {
+                    storage.close();
+                    return reject(err);
+                }
+
+                const readStream = fs.createReadStream(filePath);
+
+                const uploadStream = storage.upload({
+                    name: fileName,
+                    allowUploadBuffering: true,
+                });
+
+                readStream.on("error", (error) => {
+                    storage.close();
+                    reject(error);
+                });
+
+                uploadStream.on("error", (error) => {
+                    storage.close();
+                    reject(error);
+                });
+
+                uploadStream.on("complete", (file) => {
+                    file.link((err, url) => {
+                        storage.close();
+
+                        if (err) return reject(err);
+                        resolve(url);
+                    });
+                });
+
+                readStream.pipe(uploadStream);
             });
-
-            instance.on("error", reject);
-        });
-
-        const uploadStream = storage.upload({
-            name: fileName,
-            allowUploadBuffering: true
-        });
-
-        const readStream = fs.createReadStream(filePath);
-
-        const uploadedFile = await new Promise((resolve, reject) => {
-            readStream.on("error", reject);
-            uploadStream.on("error", reject);
-            uploadStream.on("complete", resolve);
-
-            readStream.pipe(uploadStream);
-        });
-
-        const url = await new Promise((resolve, reject) => {
-            uploadedFile.link((error, link) => {
-                if (error) reject(error);
-                else resolve(link);
-            });
-        });
-
-        return url;
-
-    } finally {
-        if (storage) {
-            try {
-                storage.close();
-            } catch {}
+        } catch (error) {
+            reject(error);
         }
-    }
+    });
 };
 
-export const download = async (url) => {
-    if (!url) {
-        throw new Error("MEGA download URL is missing.");
-    }
+export const download = (url) => {
+    return new Promise((resolve, reject) => {
+        try {
+            if (!url) {
+                return reject(new Error("MEGA URL is required"));
+            }
 
-    const file = mega.File.fromURL(url);
+            const file = mega.File.fromURL(url);
 
-    await new Promise((resolve, reject) => {
-        file.loadAttributes(error => {
-            if (error) reject(error);
-            else resolve();
-        });
-    });
+            file.loadAttributes((err) => {
+                if (err) return reject(err);
 
-    return await new Promise((resolve, reject) => {
-        file.downloadBuffer((error, buffer) => {
-            if (error) reject(error);
-            else resolve(buffer);
-        });
+                file.downloadBuffer((err, buffer) => {
+                    if (err) return reject(err);
+                    resolve(buffer);
+                });
+            });
+        } catch (error) {
+            reject(error);
+        }
     });
 };
