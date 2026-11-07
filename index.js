@@ -1,38 +1,62 @@
 import express from "express";
-import path from "path";
+import bodyParser from "body-parser";
 import { fileURLToPath } from "url";
+import path from "path";
+import events from "events";
+
 import pairRouter from "./pair.js";
+import qrRouter from "./qr.js";
 
 const app = express();
-const PORT = process.env.PORT || 8000;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-app.disable("x-powered-by");
-app.use(express.json({ limit: "10kb" }));
-app.use(express.urlencoded({ extended: false }));
+const PORT = process.env.PORT || 8000;
 
+// Event configuration
+events.EventEmitter.defaultMaxListeners = 500;
+
+// Middleware
+app.disable("x-powered-by");
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
+app.use(bodyParser.json());
 app.use(express.static(__dirname));
 
+// Home page
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "pair.html"));
 });
 
+// Pair & QR routes
 app.use("/pair", pairRouter);
+app.use("/qr", qrRouter);
 
+// Health check
 app.get("/health", (req, res) => {
-    res.json({
+    res.status(200).json({
         status: "online",
-        name: "DARK DILA-MD"
+        bot: "DARK DILA-MD",
+        message: "Pair Web Server is running"
     });
 });
 
-// Local device only: do not expose this server publicly.
-app.listen(PORT, "127.0.0.1", () => {
-    console.log("================================");
-    console.log("       DARK DILA-MD");
-    console.log("================================");
-    console.log(`Website: http://127.0.0.1:${PORT}`);
-    console.log("Pair Code service is ready.");
+// 404 Handler
+app.use((req, res) => {
+    res.status(404).send("404 - Page Not Found");
 });
+
+// Start Server
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`
+====================================
+       DARK DILA-MD PAIR WEB
+====================================
+ Server : http://localhost:${PORT}
+ Status : ONLINE
+====================================
+    `);
+});
+
+export default app;
